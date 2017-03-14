@@ -203,6 +203,66 @@ class Model(dict,metaclass = ModelMetaclass):
 		return value
 
 
+@classmethod
+# 类方法有类变量cls传入，从而可以用cls做一些相关的处理。
+#并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类。
+@asyncio.coroutine
+#根据WHERE条件查找
+def find_all(cls,where=None,args = None,**kw):
+	sql = [cls.__select__]
+	if where:
+		sql.append('where')
+		sql.append(where)
+	if args in None:
+		args = []
+	#dict提供get方法，指定不放在时候返回后面第二个参数None
+	orderBy = kw.get('orderby',None)
+	if orderBy:
+		sql.append('order by')
+		sql.append(orderBy)
+	limit = kw.get('limit',None)
+	if limit is not None:
+		sql.append('limit')
+		if isinstance(limit,int):
+			sql.append('?')
+			args.append(limit)
+		elif isinstance(limit,tuple) and len(limit) ==2:
+			sql.append('?,?')
+			args.extend(limit)
+		else:
+			raise ValueError('Invalid limit value:%s' % str(limit))
+	#返回的rs是一个元素为tuple的list
+	rs = yield from select(''.join(sql),args)
+	#**r是关键字参数，构成一个cls类的列表。即每一条记录对应的类实例
+	return [cls(**r) for r in rs]
+
+
+#根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL。
+@classmethod
+@asyncio.coroutine
+def findNumber(cls,selectField,where = None,args=None):
+	#find number by select and where.
+	sql = ['select %s __num__from `%s`' % (selectField,cls.__table__)]
+	if where:
+		sql.append('where')
+		sql.append(where)
+	rs = yield from select(''.join(sql),args,1)
+	if len(rs) ==0:
+		return None
+	return rs[0][__num__]
+
+@classmethod
+@asyncio.coroutine
+def find(cls,primarykey):
+	#find object by primary key
+	#rs是一个list，里面是一个dict
+	rs = yield from select('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primaryKey],1)
+	if len(rs)==0:
+		return None
+	#返回一条记录，以dict的形式返回，因为cls的父类继承了dict类	
+	return cls(**rs[0])
+
+
 
 if __name__=='__main__':
 	class User2(Model):
