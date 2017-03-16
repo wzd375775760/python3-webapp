@@ -1,7 +1,9 @@
 #http://blog.csdn.net/haskei/article/details/57075381
+import sys
 import logging,logging
 #一次使用异步 处处使用异步
 import asyncio 
+import aiomysql
 
 @asyncio.coroutine
 def create_pool(loop,**kw):				##**kw是一个dict
@@ -9,40 +11,69 @@ def create_pool(loop,**kw):				##**kw是一个dict
 	global __pool
 	#http://aiomysql.readthedocs.io/en/latest/pool.html
 	__pool = yield from aiomysql.create_pool(
-		host = kw.get('host','localhost'),
-		port = kw.get('port,3306'),
-		user = kw['user'],
-		password = kw['password'],
-		db = kw['db'],
-		charset = kw.get('charset','utf-8'),
-		autocommit = kw.get('autocommit',True),
-		maxsize = kw.get('maxsize',10),
-		minsize = ke.get('minsize',1),
-		loop = loop
+        host=kw.get('host','localhost'),    
+        port=kw.get('port',3306),      
+        user=kw['user'],  
+        password=kw['password'],  
+        db=kw['db'],  
+        charset=kw.get('charset','utf8'),  
+        autocommit=kw.get('autocommit',True), #默认自动提交事务，不用手动去提交事务  
+        maxsize=kw.get('maxsize',10),  
+        minsize=kw.get('minsize',1),  
+        loop=loop 
 		)
+	
+@asyncio.coroutine
+def destroy_pool():
+	global __pool
+	if __pool is not None:
+		#关闭进程池,The method is not a coroutine,就是说close()不是一个协程，所有不用yield from
+		__pool.close()
+		#但是wait_close()是一个协程，所以要用yield from,到底哪些函数是协程，上面Pool的链接中都有
+		yield from __pool.wait_closed()
+
 
 @asyncio.coroutine
 def select(sql,args,size=None):
-	log(sql,args)
+	logging.info(sql,args)
 	global __pool
 	with (yield from __pool) as conn:		#返回连接池信息
-		cur = yield from conn.cursor(aiomysql.DictCursor)		#A cursor which returns results as a dictionary
-		yield from cur.execute(sql.replace('?','%s'),args or ())	#将占位符从sql变为mysql的。
+		cur = yield from conn.cursor(aiomysql.DictCursor)		
+		#A cursor which returns results as a dictionary
+		# execute(query, args=None)
+		# Coroutine, executes the given operation substituting any markers with the given parameters.
+		# For example, getting all rows where id is 5:
+		# yield from cursor.execute("SELECT * FROM t1 WHERE id=%s", (5,))
+		# Parameters:	
+		# query (str) – sql statement
+		# args (list) – tuple or list of arguments for sql query
+		# Returns int:	
+		# number of rows that has been produced of affected
+		# print(sql)
+		# print(sql.replace('?', '%s'), args)
+		print('select函数开始：',sql.replace('?', '%s'),args)
+		yield from cur.execute(sql.replace('?', '%s'), args)		#将占位符从sql变为mysql的。
+		# yield from cur.execute('select `id`,`email`,`name`,`password` from `User`')
+        # yield from cur.execute('select * from user')	
+		# print('sise :',size)
 		if size:
 			rs = yield from cur.fetchmany(size)			#Fetch many rows, just like aiomysql.Cursor.fetchmany().
 		else:
 			rs = yield from cur.fetchall()				
 		yield from cur.close()
-		logging.info('rows returned:%s'%len(rs))
+		# print('rows returned:%s'%len(rs))
+		# print(rs)
 		return rs 										#rs是一个list
 
 @asyncio.coroutine
 def execute(sql,args):
-	log(sql)
+	# print('execute函数开始:',sql.replace('?', '%s'))
+
 	with(yield from __pool) as conn:
 		try:
 			cur = yield from conn.cursor()
-			yield from cur.execute(sql.replace('?','%s'),args)
+			# execute: insert into `User` (`password`,`name`,`email`,`id`) values (%s,%s,%s,%s)  ['321654', 'Tom', '3757757@qq.com', 4]
+			yield from cur.execute(sql.replace('?', '%s'), args)
 			affected = cur.rowcount
 			yield from cur.close()
 		except BaseExecption as e:
@@ -109,6 +140,7 @@ class ModelMetaclass(type):
 		attrs['__primary_key__']=primaryKey 			#主键属性名
 		attrs['__fields__'] = fields  					#除主键外的属性名
 		#构造默认的select，insert，update和delete语句
+		# print('select `%s`,%s from `%s` ' % (primaryKey,','.join(escaped_fields),tableName))
 		attrs['__select__'] = 'select `%s`,%s from `%s` ' % (primaryKey,','.join(escaped_fields),tableName)
 		attrs['__insert__'] = 'insert into `%s` (%s,`%s`) values (%s) ' %(tableName,','.join(escaped_fields),primaryKey,create_args_string(len(escaped_fields)+1))
 		attrs['__update__'] = 'update `%s` set %s where `%s` = ?' % (tableName,','.join(map(lambda f:'`%s`=? '% (mappings.get(f).name or f),fields)),primaryKey)
@@ -137,6 +169,7 @@ class Field(object):
 
 	def __str__(self):
 		#返回表名称，字段名，字段类型
+		#a.__class__等效于类A。self.__class__.__name__代表类的名称（表名）
 		return '<%s,%s,%s>' %(self.__class__.__name__,self.name,self.column_type)
 
 #数据库中的五个存储类型
@@ -202,81 +235,122 @@ class Model(dict,metaclass = ModelMetaclass):
 				setattr(self,key,value)
 		return value
 
+	#类方法，谣传一个默认的参数cls 并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类。
+	@classmethod
+	@asyncio.coroutine
+	#根据WHERE条件查找
+	def find_all(cls,where=None,args = None,**kw):
+		sql = [cls.__select__]
+		if where:
+			sql.append('where')
+			sql.append(where)
+		if args in None:
+			args = []
+		#dict提供get方法，指定不放在时候返回后面第二个参数None
+		orderBy = kw.get('orderby',None)
+		if orderBy:
+			sql.append('order by')
+			sql.append(orderBy)
+		limit = kw.get('limit',None)
+		if limit is not None:
+			sql.append('limit')
+			if isinstance(limit,int):
+				sql.append('?')
+				args.append(limit)
+			elif isinstance(limit,tuple) and len(limit) ==2:
+				sql.append('?,?')
+				args.extend(limit)
+			else:
+				raise ValueError('Invalid limit value:%s' % str(limit))
+		#返回的rs是一个元素为tuple的list
+		rs = yield from select(''.join(sql),args)
+		#**r是关键字参数，构成一个cls类的列表。即每一条记录对应的类实例
+		return [cls(**r) for r in rs]
 
-@classmethod
-# 类方法有类变量cls传入，从而可以用cls做一些相关的处理。
-#并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类。
-@asyncio.coroutine
-#根据WHERE条件查找
-def find_all(cls,where=None,args = None,**kw):
-	sql = [cls.__select__]
-	if where:
-		sql.append('where')
-		sql.append(where)
-	if args in None:
-		args = []
-	#dict提供get方法，指定不放在时候返回后面第二个参数None
-	orderBy = kw.get('orderby',None)
-	if orderBy:
-		sql.append('order by')
-		sql.append(orderBy)
-	limit = kw.get('limit',None)
-	if limit is not None:
-		sql.append('limit')
-		if isinstance(limit,int):
-			sql.append('?')
-			args.append(limit)
-		elif isinstance(limit,tuple) and len(limit) ==2:
-			sql.append('?,?')
-			args.extend(limit)
+
+	#根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL。
+	@classmethod
+	@asyncio.coroutine
+	def findNumber(cls,selectField,where = None,args=None):
+		#find number by select and where.
+		sql = ['select %s __num__from `%s`' % (selectField,cls.__table__)]
+		if where:
+			sql.append('where')
+			sql.append(where)
+		rs = yield from select(''.join(sql),args,1)
+		if len(rs) ==0:
+			return None
+		return rs[0][__num__]
+
+	@classmethod
+	@asyncio.coroutine
+	def find(cls,primarykey):
+		#find object by primary key
+		#rs是一个list，里面是一个dict
+		print('find函数开始：')
+		print('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primarykey],1)
+		rs = yield from select('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primarykey],1)
+		if len(rs)==0:
+			return None
+		#返回一条记录，以dict的形式返回，因为cls的父类继承了dict类	
+		return cls(**rs[0])
+
+	@classmethod
+	@asyncio.coroutine
+	def findAll(cls,**kw):
+		rs = []
+		# print('@@',cls.__select__)
+		if len(kw) ==0:
+			rs = yield from select(cls.__select__,None)
+			# print('rs:',rs)
 		else:
-			raise ValueError('Invalid limit value:%s' % str(limit))
-	#返回的rs是一个元素为tuple的list
-	rs = yield from select(''.join(sql),args)
-	#**r是关键字参数，构成一个cls类的列表。即每一条记录对应的类实例
-	return [cls(**r) for r in rs]
+			args = []
+			values=[]
+			for k,v in kw.items():
+				args.append('%s=?' % k)
+				values.append(v)
+			# print('%s where %s' % (cls.__select__,' and '.join(args)),values)
+			rs = yield from  select ('%s where %s' % (cls.__select__,' and '.join(args)),values)
+		return rs
 
+	@classmethod
+	@asyncio.coroutine
+	def findNumber(cls,selectField,where=None,args=None):
+		# 根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL
+		sql = ['select %s _num_ from `%s`' % (selectField,cls.__table__)]
+		if where:
+			sql.append(' where ')
+			sql.append(where)
+		rs = yield from select(' '.join(sql),args,1)
+		if len(rs) == 0 :
+			return None
+		return cls(**rs[0])
 
-#根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL。
-@classmethod
-@asyncio.coroutine
-def findNumber(cls,selectField,where = None,args=None):
-	#find number by select and where.
-	sql = ['select %s __num__from `%s`' % (selectField,cls.__table__)]
-	if where:
-		sql.append('where')
-		sql.append(where)
-	rs = yield from select(''.join(sql),args,1)
-	if len(rs) ==0:
-		return None
-	return rs[0][__num__]
+	@asyncio.coroutine
+	def save(self):
+		args = list(map(self.getValueOrDefault,self.__fields__))
+		args.append(self.getValueOrDefault(self.__primary_key__))
+		print('save函数开始：save:%s' % args)
+		rows = yield from execute(self.__insert__,args)
+		# print('返回参数rows：',rows)
+		if rows !=1:
+			print(self.__insert__)
+			logging.warning('failed to insert record:affected rows:%s' %rows)
 
-@classmethod
-@asyncio.coroutine
-def find(cls,primarykey):
-	#find object by primary key
-	#rs是一个list，里面是一个dict
-	rs = yield from select('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primaryKey],1)
-	if len(rs)==0:
-		return None
-	#返回一条记录，以dict的形式返回，因为cls的父类继承了dict类	
-	return cls(**rs[0])
+	@asyncio.coroutine
+	def update(self):
+		#获得的value是要user示例的属性值，即传入的name，email，password值
+		args = list(map(self.getValue,self.__fields__))
+		args.append(self.getValue(self.__primary_key__))
+		print('执行update：',args)
+		print(self.__update__)
+		rows = yield from execute(self.__update__,args)
+		if rows !=1:
+			logging.warning('failed to update record:affected rows: %s' % rows)
 
-
-
-if __name__=='__main__':
-	class User2(Model):
-		id = IntegerField('id',primary_key=True)
-		name = StringField('name')
-		email = StringField('email')
-		password = StringField('password')
-		#创建异步时间的句柄
-		loop = asyncio.get_event_loop()
-
-		#创建实例
-		@asyncio.coroutine
-		def test():
-			yield from create_pool(loop=loop,host = 'localhost',port = 'root',user='root',password = 'password',db='test')
-			user = User2(id=4,name='Tom',email='3757757@qq.com',password='321654')
-
-
+	@asyncio.coroutine
+	def delete(self):
+		args = [self.getValue(self.__primary_key__)]
+		rows = yield from execute(self.__delete__,args)
+		if rows !=1:
+			logging.warning('failed to delete by primary key:affected rows: %s' % rows)
