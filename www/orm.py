@@ -73,6 +73,7 @@ def execute(sql,args):
 		try:
 			cur = yield from conn.cursor()
 			# execute: insert into `User` (`password`,`name`,`email`,`id`) values (%s,%s,%s,%s)  ['321654', 'Tom', '3757757@qq.com', 4]
+			print('execute函数开始:%s' % sql)
 			yield from cur.execute(sql.replace('?', '%s'), args)
 			affected = cur.rowcount
 			yield from cur.close()
@@ -135,7 +136,7 @@ class ModelMetaclass(type):
 		# 保存除主键外的属性为''列表形式  
         # 将除主键外的其他属性变成`id`, `name`这种形式，关于反引号``的用法，可以参考点击打开链接
 		escaped_fields = list(map(lambda f:'`%s`' %f,fields))
-		attrs['__mapping__'] = mappings 				#保存属性和列的映射关系
+		attrs['__mappings__'] = mappings 				#保存属性和列的映射关系
 		attrs['__table__'] =tableName
 		attrs['__primary_key__']=primaryKey 			#主键属性名
 		attrs['__fields__'] = fields  					#除主键外的属性名
