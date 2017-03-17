@@ -1,12 +1,12 @@
 -- schema.sql
 -- source f:\schema.sql
-drop database if exists mypython3;
+drop database if exists mypython;
 
-create database mypython3;
+create database mypython;
 
-use mypython3;
+use mypython;
 -- grant 权限1,权限2,…权限n on 数据库名称.表名称 to 用户名@用户地址 identified by ‘连接口令’;
-grant select, insert, update, delete on mypython3.* to 'root'@'localhost' identified by 'password';
+grant select, insert, update, delete on mypython.* to 'root'@'localhost' identified by 'password';
 
 create table users (
     `id` varchar(50) not null,
