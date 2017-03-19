@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# 建立ORM(Object, Relational Mapping, 对象关系映射), 此处所有代码都是为此服务的——创建了全局数据库连接池, 
+# 封装sql操作, 自定义元类, 定义Model类
+
 #http://blog.csdn.net/haskei/article/details/57075381
 import sys
 import logging,logging
@@ -114,11 +120,11 @@ class ModelMetaclass(type):
 		# 这个k是表示字段名
 		for k,v in attrs.items():
 			if isinstance(v,Field):
-				logging.info('  fount mapping :%s===>%s' % (k,v))
+				# logging.info('found mapping :%s===>%s' % (k,v))
 				mappings[k]=v
 				# 这里很有意思 当第一次主键存在primaryKey被赋值 后来如果再出现主键的话就会引发错误  
 				if v.primary_key:
-					logging.info('fond primary key %s' % k )
+					# logging.info('fond primary key %s' % k )
 					# print('~'*20,primaryKey)
 					 #一个表只能有一个主键，当再出现一个主键的时候就报错
 					if primaryKey:

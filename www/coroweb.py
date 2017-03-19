@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+# web框架(廖老师的说法), 说白了就是事务处理(handler)的基础准备. 
+# 此处定义了get与post装饰器, 与之对应的是handler的http method部分概念. 
+# 又定义了RequestHandler类, 前文说过, 注册到app上的其实就是RequestHandler对象, 
+# 因为实现了__call__方法, 所以可以当函数使用. 可以说, RequestHandler起了包装handler的作用.
+#  还有一些辅助函数, 比如添加静态文件, 自动注册handler等
+
 #http://www.qiangtaoli.com/bootstrap/blog/001466339384240fec2e91483ac41bdb5352c1034be03e9000
 
 'web 框架'
@@ -55,7 +62,7 @@ def get_required_kw_args(fn):
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
 		# 获取是命名关键字,且未指定默认值的参数名
-		if param.kind == inspect.Parameters.KEYWORD_ONLY and inspect.Parameter.empty:
+		if param.kind == inspect.Parameter.KEYWORD_ONLY and inspect.Parameter.empty:
 			args.append(name)
 	return tuple(args)
 
@@ -67,7 +74,7 @@ def get_named_kw_args(fn):
 	for name , param in params.items():
 		# KEYWORD_ONLY, 表示命名关键字参数.
 		# 因此下面的操作就是获得命名关键字参数名
-		if param.kind == inspect.Parameters.KEYWORD_ONLY:
+		if param.kind == inspect.Parameter.KEYWORD_ONLY:
 			args.append(name)
 	return tuple(args)
 
@@ -76,7 +83,7 @@ def has_named_kw_args(fn):
 	args = []
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
-		if param.kind == inspect.Parameters.KEYWORD_ONLY:
+		if param.kind == inspect.Parameter.KEYWORD_ONLY:
 			args.append(name)
 	return True
 
@@ -86,15 +93,15 @@ def has_var_kw_arg(fn):
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
 		# VAR_KEYWORD, 表示关键字参数, 匹配**kw
-		if param.kind == inspect.Parameters.VAR_KEYWORD:
-			args.append(name)
-	return True
+		if param.kind == inspect.Parameter.VAR_KEYWORD:
+			return True
+	
 
 # 函数fn是否有请求关键字
 def has_request_arg(fn):
 	sig  = inspect.signature(fn)
 	params = sig.parameters
-	Found = False
+	found = False
 	for name , param in params.items():
 		if name =='request':		# 找到名为"request"的参数,置found为真
 			found = True
@@ -123,6 +130,7 @@ class RequestHandler(object):
 	# 定义了__call__,则其实例可以被视为函数
 	# 此处参数为request
 	async def __call__(self,request):
+		print("RequeHandler __call__函数开始：")
 		kw = None			# 设不存在关键字参数
 		# 存在关键字参数/命名关键字参数
 		if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
@@ -184,8 +192,9 @@ class RequestHandler(object):
 		if self._required_kw_args:
 			for name in self._required_kw_args:
 				if not name in kw:
-					return web.HTTPBadRequest('Missing argument:%s' %name)					
-		logging.info('call with args : %s' %str(kw))
+					# return web.HTTPBadRequest('Missing argument:%s' %name)
+					return web.HTTPBadRequest()				
+		logging.info('call with args : %s' % str(kw))
 		# 以上过程即为从request中获得必要的参数
 
 		# 以下调用handler处理,并返回response
@@ -211,20 +220,24 @@ def add_static(app):
 def add_route(app,fn):
 	method = getattr(fn,'__method__',None)  # 获取fn.__method__属性,若不存在将返回None
 	path = getattr(fn,'__route__',None)
+	print('注册函数：',method,path)
 	# http method 或 path 路径未知,将无法进行处理,因此报错
-	if path in None or method is None:
+	if path is None or method is None:
 		raise ValueError('@get or @post not defined in %s.' %str(fn))
 	# 将非协程或生成器的函数变为一个协程.
 	if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
 		fn = asyncio.coroutine(fn)
 	logging.info('add route %s %s =>%s(%s) ' % (method,path,fn.__name__,','.join(inspect.signature(fn).parameters.keys())))	
 	# 注册request handler
-	app.router.add_route(method,path,RequestHandler(app.fn))
+	app.router.add_route(method,path,RequestHandler(app,fn))
 
 # 自动注册所有请求处理函数
 def add_routes(app,module_name):
+	
 	n = module_name.rfind('.') # n 记录模块名中最后一个.的位置
-	if n ==(-1): # -1 表示未找到,即module_name表示的模块直接导入
+	print('add_routes开始：',n,'  ',module_name)
+	if n ==(-1): 
+		# -1 表示未找到,即module_name表示的模块直接导入
 		#__import__导出外部模块  http://david-je.iteye.com/blog/1756788
 		# __import__()的作用同import语句,python官网说强烈不建议这么做
 		# __import__(name, globals=None, locals=None, fromlist=(), level=0)
@@ -232,16 +245,20 @@ def add_routes(app,module_name):
 		# globals, locals -- determine how to interpret the name in package context
 		# fromlist -- name表示的模块的子模块或对象名列表
 		# level -- 绝对导入还是相对导入,默认值为0, 即使用绝对导入,正数值表示相对导入时,导入目录的父目录的层数
+		# 通常在动态加载时可以使用到这个函数，比如你希望加载某个文件夹下的所用模块，但是其下的模块名称又会经常变化时，
+		# 就可以使用这个函数动态加载所有模块了，最常见的场景就是插件功能的支持。
 		mod = __import__(module_name,globals(),locals())
 	else:
 		name = module_name[n+1:]
 		# 以下语句表示, 先用__import__表达式导入模块以及子模块
 		# 再通过getattr()方法取得子模块名, 如datetime.datetime
 		mod = getattr(__import__(module_name[:n],globals(),locals(),[name]),name)
+	# print('~~',mod);
 	# 遍历模块目录
 	for attr in dir(mod):
 		# 忽略以_开头的属性与方法,_xx或__xx(前导1/2个下划线)指示方法或属性为私有的,__xx__指示为特殊变量
 		# 私有的,能引用(python并不存在真正私有),但不应引用;特殊的,可以直接应用,但一般有特殊用途
+		print("发现attr:",attr)
 		if attr.startswith('_'):
 			continue
 		# 获得模块的属性或方法, 如datetime.datetime.now # 前一个datetime表示模块名,后一个表示子模块名,如果是以上述else方法导入的模块,就应为datetime.datetime形式

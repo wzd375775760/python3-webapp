@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#web app骨架.在这里, 初始化了jinja2环境, 实现了各middleware factory, 
+# 最重要的是——创建了app对象, 完成系统初始化
+
 #https://toutiao.io/posts/x6jfdi/preview
 #https://github.com/Engine-Treasure/awesome-python3-webapp/blob/master/www/app.py
 'web application骨架'
@@ -13,18 +16,19 @@ logging.basicConfig(level=logging.INFO,
 
 import asyncio,os,json,time
 from datetime import *
-
+import time
 from aiohttp import web
-
 import orm
 from coroweb import add_routes,add_static
 
 #从jinja2模板库导入环境与文件系统加载器
 from jinja2 import Environment,FileSystemLoader
 
+
 # 选择jinja2作为模板, 初始化模板
 def init_jinja2(app,**kw):
 	logging.info('init jinja2...')
+	print(kw)
 	# 设置jinja2的Environment参数
 	options = dict(
 		autoescape = kw.get('autoescape',True),		# 自动转义xml/html的特殊字符
@@ -45,6 +49,7 @@ def init_jinja2(app,**kw):
 	logging.info('set jinja2 template path:%s' % path)
 	# 初始化jinja2环境, options参数,之前已经进行过设置
 	# 加载器负责从指定位置加载模板, 此处选择FileSystemLoader,顾名思义就是从文件系统加载模板,前面我们已经设置了path
+	print('jinja2初始化时path：',options)
 	env = Environment(loader = FileSystemLoader(path),**options)
 	# 设置过滤器
 	# 先通过filters关键字参数获取过滤字典
@@ -81,7 +86,7 @@ async def auth_factory(app,handler):
 		request.__user__=None
 		# 通过cookie名取得加密cookie字符串(不明白的看看handlers.py)
 		cookie_str = request.cookies.get('COOKIE_NAME')
-		if cookies_str:
+		if cookie_str:
 			# 验证cookie,并得到用户信息
 			user = await cookie2user(cookie_str)
 			if user:
@@ -122,6 +127,7 @@ async def response_factory(app,handler):
 		logging.info('Response handler...')
 		# 调用handler来处理url请求,并返回响应结果
 		r = await handler(request)
+		print("response_factory:",r)
 		# 若响应结果为StreamResponse,直接返回
 		# StreamResponse是aiohttp定义response的基类,即所有响应类型都继承自该类
 		# StreamResponse主要为流式数据而设计
@@ -151,6 +157,7 @@ async def response_factory(app,handler):
 				return resp
 			# 存在对应模板的,则将套用模板,用request handler的结果进行渲染	
 			else:
+				print("套用模板：",request.__user__)
 				r['__user__'] = request.__user__
 				resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
 				resp.content_type ='text/html;charset = utf-8'
@@ -176,7 +183,9 @@ async def response_factory(app,handler):
 # 时间过滤器
 def datetime_filer(t):
 	#定义时间差
+	print('~~~~~~开始执行filter时间过滤器',t)
 	delta = int (time.time()-t)
+
 	#针对时间分类
 	if delta<60:
 		return u'1分钟前'

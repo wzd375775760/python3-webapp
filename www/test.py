@@ -9,10 +9,10 @@ if __name__=='__main__':
 	def test():
 		b = yield from orm.create_pool(loop=loop,host = 'localhost',port=3306,user='root',password='password',db='mypython')
 		user = User(name='Jack',email='Jack@163.com',passwd='1234567890',image='about:blank')
-		# yield from user.save()
+		yield from user.save()
 		# r = yield from User.findAll(name = 'Jack')
 		# r = yield from user.findAll()	
-		print(r)
+		# print(r)
 
 		yield from orm.destroy_pool()
 

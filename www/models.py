@@ -1,4 +1,6 @@
-#user blog comment三个model
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# 在ORM基础上, 建立具体的类,
 
 import time,uuid
 from orm import Model,StringField,BooleanField,FloatField,TextField
