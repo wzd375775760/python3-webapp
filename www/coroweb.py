@@ -62,7 +62,7 @@ def get_required_kw_args(fn):
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
 		# 获取是命名关键字,且未指定默认值的参数名
-		if param.kind == inspect.Parameter.KEYWORD_ONLY and inspect.Parameter.empty:
+		if param.kind == inspect.Parameter.KEYWORD_ONLY and param.default == inspect.Parameter.empty:
 			args.append(name)
 	return tuple(args)
 
@@ -89,7 +89,6 @@ def has_named_kw_args(fn):
 
 # 判断函数fn是否带有关键字参数
 def has_var_kw_arg(fn):
-	args = []
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
 		# VAR_KEYWORD, 表示关键字参数, 匹配**kw
@@ -109,7 +108,7 @@ def has_request_arg(fn):
 		# VAR_POSITIONAL,表示可选参数,匹配*args
 		# 若已经找到"request"关键字,但其不是函数的最后一个参数,将报错
 		# request参数必须是最后一个命名参数
-		if found and (param.kind!=inspect.Parameter.VAR_POSITIONAL and param.kind !=inspect.Parameter.KEYWORD_ONLY and param.kind!=inspect.Parameter.VAR_KEYWORD):
+		if found and (param.kind != inspect.Parameter.VAR_POSITIONAL and param.kind != inspect.Parameter.KEYWORD_ONLY and param.kind != inspect.Parameter.VAR_KEYWORD):
 			raise ValueError('request parameter must be the last named parameter in function :%s%s' %(fn.__name__,str(sig)))
 	return found
 
@@ -130,7 +129,12 @@ class RequestHandler(object):
 	# 定义了__call__,则其实例可以被视为函数
 	# 此处参数为request
 	async def __call__(self,request):
-		print("RequeHandler __call__函数开始：")
+		logging.info("RequestHandler函数开始");
+		logging.info(self._has_request_arg)
+		logging.info(self._has_var_kw_arg)
+		logging.info(self._has_named_kw_args)
+		logging.info(self._named_kw_args)
+		logging.info(self._required_kw_args)
 		kw = None			# 设不存在关键字参数
 		# 存在关键字参数/命名关键字参数
 		if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
@@ -166,6 +170,8 @@ class RequestHandler(object):
 					for k,v in parse.parse_qs(qs,True).items(): # 解析query_string,以字典的形如储存到kw变量中
 						kw[k]=v[0]
 		# 经过以上处理, kw仍未空,即以上全部不匹配,则获取请求的abstract math info(抽象数学信息),好吧,我也不知道这是什么鬼东西,并以字典形式存入kw
+		logging.info("处理后参数kw:")
+		logging.info(kw)
 		if kw is None:
 			kw = dict(**request.match_info)
 		else:
@@ -220,7 +226,6 @@ def add_static(app):
 def add_route(app,fn):
 	method = getattr(fn,'__method__',None)  # 获取fn.__method__属性,若不存在将返回None
 	path = getattr(fn,'__route__',None)
-	print('注册函数：',method,path)
 	# http method 或 path 路径未知,将无法进行处理,因此报错
 	if path is None or method is None:
 		raise ValueError('@get or @post not defined in %s.' %str(fn))
@@ -233,9 +238,8 @@ def add_route(app,fn):
 
 # 自动注册所有请求处理函数
 def add_routes(app,module_name):
-	
+	# logging.info("开始coroweb中的add_routes")
 	n = module_name.rfind('.') # n 记录模块名中最后一个.的位置
-	print('add_routes开始：',n,'  ',module_name)
 	if n ==(-1): 
 		# -1 表示未找到,即module_name表示的模块直接导入
 		#__import__导出外部模块  http://david-je.iteye.com/blog/1756788
@@ -253,12 +257,10 @@ def add_routes(app,module_name):
 		# 以下语句表示, 先用__import__表达式导入模块以及子模块
 		# 再通过getattr()方法取得子模块名, 如datetime.datetime
 		mod = getattr(__import__(module_name[:n],globals(),locals(),[name]),name)
-	# print('~~',mod);
 	# 遍历模块目录
 	for attr in dir(mod):
 		# 忽略以_开头的属性与方法,_xx或__xx(前导1/2个下划线)指示方法或属性为私有的,__xx__指示为特殊变量
 		# 私有的,能引用(python并不存在真正私有),但不应引用;特殊的,可以直接应用,但一般有特殊用途
-		print("发现attr:",attr)
 		if attr.startswith('_'):
 			continue
 		# 获得模块的属性或方法, 如datetime.datetime.now # 前一个datetime表示模块名,后一个表示子模块名,如果是以上述else方法导入的模块,就应为datetime.datetime形式

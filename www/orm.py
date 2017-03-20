@@ -41,7 +41,6 @@ def destroy_pool():
 
 @asyncio.coroutine
 def select(sql,args,size=None):
-	logging.info(sql,args)
 	global __pool
 	with (yield from __pool) as conn:		#返回连接池信息
 		cur = yield from conn.cursor(aiomysql.DictCursor)		
@@ -280,58 +279,71 @@ class Model(dict,metaclass = ModelMetaclass):
 	@asyncio.coroutine
 	def findNumber(cls,selectField,where = None,args=None):
 		#find number by select and where.
-		sql = ['select %s __num__from `%s`' % (selectField,cls.__table__)]
+		logging.info('ORM的findNumber函数：')
+		sql = ["select %s _num_ from `%s`" % (selectField, cls.__table__)]
 		if where:
 			sql.append('where')
 			sql.append(where)
-		rs = yield from select(''.join(sql),args,1)
+		rs = yield from select(' '.join(sql), args, 1)
 		if len(rs) ==0:
 			return None
-		return rs[0][__num__]
+		return rs[0]["_num_"]
 
 	@classmethod
 	@asyncio.coroutine
 	def find(cls,primarykey):
 		#find object by primary key
 		#rs是一个list，里面是一个dict
-		print('find函数开始：')
-		print('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primarykey],1)
+		# 我们之前已将将数据库的select操作封装在了select函数中,以下select的参数依次就是sql, args, size
 		rs = yield from select('%s where `%s` = ?' % (cls.__select__,cls.__primary_key__),[primarykey],1)
 		if len(rs)==0:
 			return None
-		#返回一条记录，以dict的形式返回，因为cls的父类继承了dict类	
+		#返回一条记录，以dict的形式返回，因为cls的父类继承了dict类
+		# **表示关键字参数,我当时还疑惑怎么用到了指针?知识交叉了- -
+		# 注意,我们在select函数中,打开的是DictCursor,它会以dict的形式返回结果	
 		return cls(**rs[0])
 
 	@classmethod
 	@asyncio.coroutine
-	def findAll(cls,**kw):
-		rs = []
-		# print('@@',cls.__select__)
-		if len(kw) ==0:
-			rs = yield from select(cls.__select__,None)
-			# print('rs:',rs)
-		else:
-			args = []
-			values=[]
-			for k,v in kw.items():
-				args.append('%s=?' % k)
-				values.append(v)
-			# print('%s where %s' % (cls.__select__,' and '.join(args)),values)
-			rs = yield from  select ('%s where %s' % (cls.__select__,' and '.join(args)),values)
-		return rs
-
-	@classmethod
-	@asyncio.coroutine
-	def findNumber(cls,selectField,where=None,args=None):
-		# 根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL
-		sql = ['select %s _num_ from `%s`' % (selectField,cls.__table__)]
-		if where:
-			sql.append(' where ')
+	def findAll(cls,where = None,args = None,**kw):
+		sql = [cls.__select__]
+		# 我们定义的默认的select语句是通过主键查询的,并不包括where子句
+		# 因此若指定有where,需要在select语句中追加关键字
+		if where :
+			sql.append('where')
 			sql.append(where)
-		rs = yield from select(' '.join(sql),args,1)
-		if len(rs) == 0 :
-			return None
-		return cls(**rs[0])
+		if args is None:
+			args = []
+		orderBy = kw.get('orderBy',None)
+		if orderBy:
+			sql.append('order by')
+			sql.append(orderBy)
+		limit = kw.get('limit',None)
+		if limit is not None:
+			sql.append('limit')
+			if isinstance(limit,int):
+				sql.append('?')
+				args.append(limit)
+			elif isinstance(limit,tuple) and len(limit) ==2:
+				sql.append(' ?,? ')
+				args.extend(limit)
+			else:
+				raise ValueError('Invalid limit value:%s' % str(limit))		
+		rs = yield from select(' '.join(sql),args)
+		return [cls(**r) for r in rs]
+
+	# @classmethod
+	# @asyncio.coroutine
+	# def findNumber(cls,selectField,where=None,args=None):
+	# 	# 根据WHERE条件查找，但返回的是整数，适用于select count(*)类型的SQL
+	# 	sql = ['select %s _num_ from `%s`' % (selectField,cls.__table__)]
+	# 	if where:
+	# 		sql.append(' where ')
+	# 		sql.append(where)
+	# 	rs = yield from select(' '.join(sql),args,1)
+	# 	if len(rs) == 0 :
+	# 		return None
+	# 	return cls(**rs[0])
 
 	@asyncio.coroutine
 	def save(self):

@@ -14,7 +14,7 @@ import asyncio
 from aiohttp import web
 from coroweb import get, post # 导入装饰器,这样就能很方便的生成request handler
 from models import Comment,User,Blog, next_id
-# from apis import APIResourceNotFoundError, APIValueError, APIError, APIPermissionError, Page
+from apis import APIResourceNotFoundError, APIValueError, APIError, APIPermissionError, Page
 from config import configs
 
 #匹配邮箱与加密后面的正则表达式
@@ -24,9 +24,9 @@ _RE_SHA1=re.compile(r'[0-9a-f]{40}$')
 
 #取得页码
 def get_page_index(page_str):
-	p=1
+	p = 1
 	try:
-		p=int(page_str)
+		p = int(page_str)
 	except ValueError as e:
 		pass
 	if p<1:
@@ -36,7 +36,7 @@ def get_page_index(page_str):
 @get('/')
 def index(request):
 	summary = 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-	logging.info('get开始：');
+	logging.info('handlers的index开始：');
 	blogs=[
 		Blog(id='1',name='Text Blog',summary=summary,create_at=time.time()-120),
 		Blog(id='2',name='Something New',summary=summary,create_at=time.time()-3600),
@@ -55,22 +55,23 @@ def index(request):
 #API:获取用户信息
 @get('/api/users')
 def api_get_users(*,page='1'):
+	logging.info('api/users API_get开始:')
 	page_index = get_page_index(page)
 	num = yield from User.findNumber("count(id)")
-	p=Page(num,page_index)
+	p= Page(num,page_index)
 	if num==0:
 		return dict(page=p,users=())
 	users = yield from User.findAll(orderBy="created_at desc")
-	print('返回用户列表:',users)
 	for u in users:
 		u.paasswd="******"
 	 # 以dict形式返回,并且未指定__template__,将被app.py的response factory处理为json	
 	return dict(page=p,users=users)	
 
-#API:创建用户
+#API:创建用户_post
 @post('/api/users')
 def api_register_user(*,name,email,passwd):
 	#验证输入的正确性
+	logging.info('api/users API_post开始:')
 	if not name or not name.strip():
 		raise APIValueError("name")
 	if not mail or not _RE_EMAIL.match(email):

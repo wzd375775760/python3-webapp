@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#web app骨架.在这里, 初始化了jinja2环境, 实现了各middleware factory, 
+
+# web app骨架.在这里, 初始化了jinja2环境, 实现了各middleware factory, 
 # 最重要的是——创建了app对象, 完成系统初始化
 
 #https://toutiao.io/posts/x6jfdi/preview
@@ -28,7 +29,6 @@ from jinja2 import Environment,FileSystemLoader
 # 选择jinja2作为模板, 初始化模板
 def init_jinja2(app,**kw):
 	logging.info('init jinja2...')
-	print(kw)
 	# 设置jinja2的Environment参数
 	options = dict(
 		autoescape = kw.get('autoescape',True),		# 自动转义xml/html的特殊字符
@@ -38,6 +38,7 @@ def init_jinja2(app,**kw):
 		variable_end_string = kw.get('variable_end_string','}}'),		# 变量结束标志
 		auto_reload = kw.get('auto_reload',True)	# 每当对模板发起请求,加载器首先检查模板是否发生改变.若是,则重载模板
 		)
+
 	# 若关键字参数指定了path,将其赋给path变量, 否则path置为None
 	path = kw.get("path",None)
 	if path is None:
@@ -46,10 +47,8 @@ def init_jinja2(app,**kw):
 		# os.path.dirname(), 去掉文件名,返回目录路径
 		# os.path.join(), 将分离的各部分组合成一个路径名
 		path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'templates')
-	logging.info('set jinja2 template path:%s' % path)
 	# 初始化jinja2环境, options参数,之前已经进行过设置
 	# 加载器负责从指定位置加载模板, 此处选择FileSystemLoader,顾名思义就是从文件系统加载模板,前面我们已经设置了path
-	print('jinja2初始化时path：',options)
 	env = Environment(loader = FileSystemLoader(path),**options)
 	# 设置过滤器
 	# 先通过filters关键字参数获取过滤字典
@@ -126,7 +125,9 @@ async def response_factory(app,handler):
 	async def response(request):
 		logging.info('Response handler...')
 		# 调用handler来处理url请求,并返回响应结果
+
 		r = await handler(request)
+		# 以上调用了coroweb中RequestHandler方法，返回了response结果
 		print("response_factory:",r)
 		# 若响应结果为StreamResponse,直接返回
 		# StreamResponse是aiohttp定义response的基类,即所有响应类型都继承自该类
@@ -157,7 +158,6 @@ async def response_factory(app,handler):
 				return resp
 			# 存在对应模板的,则将套用模板,用request handler的结果进行渲染	
 			else:
-				print("套用模板：",request.__user__)
 				r['__user__'] = request.__user__
 				resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
 				resp.content_type ='text/html;charset = utf-8'
