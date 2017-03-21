@@ -11,9 +11,9 @@ configs = {
 		'user':'root',
 		'password':'password',
 		'database':'mypython'
-	},
+		},
 	'session':{
 		#定义会话信息
 		'secret':'AwEsOmE'
+		}
 	}
-}

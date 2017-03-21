@@ -129,12 +129,6 @@ class RequestHandler(object):
 	# 定义了__call__,则其实例可以被视为函数
 	# 此处参数为request
 	async def __call__(self,request):
-		logging.info("RequestHandler函数开始");
-		logging.info(self._has_request_arg)
-		logging.info(self._has_var_kw_arg)
-		logging.info(self._has_named_kw_args)
-		logging.info(self._named_kw_args)
-		logging.info(self._required_kw_args)
 		kw = None			# 设不存在关键字参数
 		# 存在关键字参数/命名关键字参数
 		if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
@@ -170,15 +164,13 @@ class RequestHandler(object):
 					for k,v in parse.parse_qs(qs,True).items(): # 解析query_string,以字典的形如储存到kw变量中
 						kw[k]=v[0]
 		# 经过以上处理, kw仍未空,即以上全部不匹配,则获取请求的abstract math info(抽象数学信息),好吧,我也不知道这是什么鬼东西,并以字典形式存入kw
-		logging.info("处理后参数kw:")
-		logging.info(kw)
 		if kw is None:
 			kw = dict(**request.match_info)
 		else:
 			# kw 不为空,且requesthandler只存在命名关键字的,则只取命名关键字参数名放入kw
 			if not self._has_var_kw_arg and self._named_kw_args:
 				#去除unamed kw
-				copy = dict
+				copy = dict()
 				for name in self._named_kw_args:
 					if name in kw:
 						copy[name]=kw[name]

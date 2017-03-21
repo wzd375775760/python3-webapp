@@ -128,7 +128,6 @@ async def response_factory(app,handler):
 
 		r = await handler(request)
 		# 以上调用了coroweb中RequestHandler方法，返回了response结果
-		print("response_factory:",r)
 		# 若响应结果为StreamResponse,直接返回
 		# StreamResponse是aiohttp定义response的基类,即所有响应类型都继承自该类
 		# StreamResponse主要为流式数据而设计

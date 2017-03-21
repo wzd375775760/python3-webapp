@@ -41,7 +41,7 @@ class Page(object):
 
 
 class APIError(Exception):
-	"""定义APIError基类，集成自exception"""
+	"""定义APIError基类，继承自exception"""
 	def __init__(self, error,data='',message = ''):
 		super(APIError, self).__init__(message)
 		self.error = error

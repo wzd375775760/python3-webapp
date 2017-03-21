@@ -2,10 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '读取配置文件,优先从conffig_override.py读取'
-
 import config_default
-
-
 
 #自定义字典
 class Dict(dict):
@@ -32,20 +29,22 @@ class Dict(dict):
 		self[key] = value
 
 #讲默认配置文件与自定义配置文件进行混合
-def merge(default,override):
+def merge(defaults,override):
 	r = {}
 	# 创建一个空的字典,用于配置文件的融合,而不对任意配置文件做修改
 	# 1) 从默认配置文件取key,优先判断该key是否在自定义配置文件中有定义
 	# 2) 若有,则判断value是否是字典,
 	# 3) 若是字典,重复步骤1
 	# 4) 不是字典的,则优先从自定义配置文件中取值,相当于覆盖默认配置文件	
-	for k,v in default.items():
+	for k,v in defaults.items():
 		if k in override:
 			if isinstance(v,dict):
 				r[k]=merge(v,override[k])
 			# 当前key只在默认配置文件中有定义的, 则从其中取值设值	
 			else:
 				r[k] = v
+		else:
+			r[k] = v
 	#返回混合好的新字典
 	return r
 
@@ -53,7 +52,7 @@ def merge(default,override):
 def toDict(d):
 	D = Dict()
 	for k ,v in d.items():
-		d[k]=toDict(v)  if isinstance(v,dict) else v
+		D[k]=toDict(v)  if isinstance(v,dict) else v
 	return D
 
 
