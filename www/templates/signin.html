@@ -28,6 +28,7 @@ $(function(){
 						email:email,
 						passwd:this.passwd ===''?'' :CryptoJS.SHA1(email + ':' + this.passwd).toString()
 					};
+				debugger;	
 				//以post形式，json格式，将数据传送到/api/authenticate
 				$form.postJSON('/api/authenticate',data,function(err,result){
 					// 正常登陆之后，将转到首页

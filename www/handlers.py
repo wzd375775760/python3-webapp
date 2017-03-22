@@ -10,12 +10,15 @@ import logging
 import hashlib
 import base64
 import asyncio
-# import markdown2
+import markdown2
 from aiohttp import web
 from coroweb import get, post # 导入装饰器,这样就能很方便的生成request handler
 from models import Comment,User,Blog, next_id
 from apis import APIResourceNotFoundError, APIValueError, APIError, APIPermissionError, Page
 from config import configs
+logging.basicConfig(level=logging.INFO,
+					format = "%(asctime)s %(message)s",
+					datefmt = "[%Y-%m-%d %H:%M:%S]")
 
 # 此处所列所有的handler都会在app.py中通过add_routes自动注册到app.router上
 # 因此,在此脚本尽情地书写request handler即可
@@ -26,6 +29,12 @@ _COOKIE_KEY = configs.session.secret 	#cookie密钥，作为加密cookie的原�
 _RE_EMAIL=re.compile(r'^[a-z0-9\.\-\_]+\@[a-z0-9\-\_]+(\.[a-z0-9\-\_]+){1,4}$')
 _RE_SHA1=re.compile(r'[0-9a-f]{40}$')
 
+#验证用户身份
+def check_admin(request):
+	logging.info('check_admin权限：')
+	logging.info(request.__user__.admin)
+	if request.__user__ is None or not request.__user__.admin:
+		raise APIPermissionError()
 
 #取得页码
 def get_page_index(page_str):
@@ -38,6 +47,14 @@ def get_page_index(page_str):
 		p = 1
 	return p
 
+#文本转html
+def text2html(text):
+	'''文本转html'''
+	# 先用filter函数对输入的文本进行过滤处理: 断行,去首尾空白字符
+	# 再用map函数对特殊符号进行转换,在将字符串装入html的<p>标签中
+	lines = map(lambda s: '<p>%s</p>' % s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), filter(lambda s: s.strip() != '', text.split('\n')))
+	# lines是一个字符串列表,将其组装成一个字符串,该字符串即表示html的段落
+	return ''.join(lines)
 
 #通过用户信息计算加密cookie
 def user2cookie(user,max_age):
@@ -63,7 +80,7 @@ def cookie2user(cookie_str):
 		uid,expires,sha1 = L
 		if int(expires) <time.time():	#失效时间小于当前时间，说明cookie已失效
 			return None
-		user = yield from User.find(uid)
+		user = yield from User.find(uid)	# 在拆分得到的id在数据库中查找用户信息
 		if user is None:
 			return None
 		# 利用用户id,加密后的密码,失效时间,加上cookie密钥,组合成待加密的原始字符串
@@ -81,23 +98,22 @@ def cookie2user(cookie_str):
 		logging.exception(e)
 	return None		
 	
-
+#首页get请求的处理
 @get('/')
-def index(request):
-	summary = 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-	blogs=[
-		Blog(id='1',name='Text Blog',summary=summary,create_at=time.time()-120),
-		Blog(id='2',name='Something New',summary=summary,create_at=time.time()-3600),
-		Blog(id='3',name='Learn Swift',summary=summary,create_at=time.time()-7200)
-	]
-	# users = yield from User.findAll()
-	# return {
-	# 	'__template__':'test.html',
-	# 	'users':users
-	# }
+def index(*,page='1'):
+	page_index = get_page_index(page)
+	num = yield from Blog.findNumber('count(id)')
+	page = Page(num,page_index)
+	if num == 0:
+		blogs = []
+	else:
+		blogs = yield from Blog.findAll(orderBy = 'created_at desc',limit = (page.offset,page.limit))
+	# 返回一个字典, 其指示了使用何种模板,模板的内容
+	# app.py的response_factory将会对handler的返回值进行分类处理
 	return {
 		'__template__':'blogs.html',
-		'blogs':blogs
+		'page':page,
+		'blogs':blogs 	# 参数blogs将在jinja2模板中被解析
 	}
 
 #API:获取用户信息
@@ -111,13 +127,18 @@ def api_get_users(*,page='1'):
 	users = yield from User.findAll(orderBy="created_at desc")
 	for u in users:
 		u.paasswd="******"
-	 # 以dict形式返回,并且未指定__template__,将被app.py的response factory处理为json	
+	 # 以dict形式返回,并且未指定__template__,将被app.py的response factory处理为json
+	print('api/user')	
 	return dict(page=p,users=users)	
 
 #API:创建用户_post
 @post('/api/users')
 def api_register_user(*,name,email,passwd):
 	#验证输入的正确性
+	print('调用api.....')
+	logging.info(name)
+	logging.info(email)
+	logging.info(passwd)
 	if not name or not name.strip():
 		raise APIValueError("name")
 	if not email or not _RE_EMAIL.match(email):
@@ -150,6 +171,7 @@ def api_register_user(*,name,email,passwd):
 	# 因此服务器可以通过设置或读取Cookies中包含信息,借此维护用户跟服务器会话中的状态
 	# user2cookie设置的是cookie的值
 	# max_age是cookie的最大存活周期,单位是秒.当时间结束时,客户端将抛弃该cookie.之后需要重新登录
+
 	r.set_cookie(COOKIE_NAME,user2cookie(user,600),max_age=600,httponly=True)	# 设置cookie最大存会时间为10min
 	# r.set_cookie(COOKIE_NAME, user2cookie(user, 86400), max_age=86400, httponly=True)  #86400s=24h
 	user.passwd = '******'	#修改密码外部显示为*
@@ -187,7 +209,73 @@ def authenticate(*,email,passwd):	#通过邮箱密码验证登录
 	user.passwd = '******'
 	r.content_type = 'application/json'
 	r.body = json.dumps(user,ensure_ascii=False).encode('utf-8')
+	logging.info(r)
 	return r	
+
+#API:获取blog_get
+@get('/api/blogs')
+def api_blogs(*,page='1'):
+	page_index = get_page_index(page)
+	num = yield from Blog.findNumber('count(id)')	# num为博客总数
+	p = Page(num,page_index)		# 创建page对象
+	if num ==0:
+		return dict(page=p, blogs=())	# 若博客数为0,返回字典,将被app.py的response中间件再处理
+	# 博客总数不为0,则从数据库中抓取博客
+	# limit强制select语句返回指定的记录数,前一个参数为偏移量,后一个参数为记录的最大数目	
+	blogs = yield from Blog.findAll(orderBy='created_at desc',limit = (p.offset,p.limit))
+	return dict(page=p,blogs=blogs)	
+
+#API:获取单条博客
+@get('/api/blogs/{id}')
+def api_get_blog(*,id):
+	blog = yield from Blog.find(id)
+	return blog
+
+#博客详情页面
+@get('/blog/{id}')
+def get_blog(id):
+	blog = yield from Blog.find(id)
+	#从数据库拉取指定blog的全部评论,按时间降序排序,即最新的排在最前
+	comments = yield from Comment.findAll('blog_id=?',[id],orderBy='created_at desc')
+	for c in comments:
+		c.html_content = text2html(c.content)
+	blog.html_content = markdown2.markdown(blog.content)	# blog是markdown格式,将其转换为html格式
+	return {
+		'__template__':'blog.html',
+		'blog':blog,
+		'comments':comments
+	}	
+
+#API:创建blog_post
+@post('/api/blogs')
+def api_create_blog(request,*,name,summary,content):
+	check_admin(request)	#检查用户权限
+	if not name or not name.strip():
+		raise APIValueError('name','name connot be empty')
+	if not summary or not summary.strip():
+		raise APIValueError('summary','summary cannot be empty')
+	if not content or not content.strip():
+		raise APIValueError('content','content cannot be empty')
+	#创建博客对象
+	logging.info('调用api')
+	logging.info(name)
+	logging.info(request.__user__.id)
+	logging.info(request)
+	blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
+	yield from blog.save()
+	return blog
+
+#写博客的页面
+@get('/manage/blogs/create')
+def manage_create_blog():
+	return {
+		'__template__':'manage_blog_edit.html',
+		'id':'',
+		'action':'/api/blogs'
+		# id的值将传给js变量I
+		# action的值也将传给js变量action
+		# 将在用户提交博客的时候,将数据post到action指定的路径,此处即为创建博客的api
+	}
 
 #返回注册页面
 @get('/register')
@@ -201,4 +289,13 @@ def register():
 def signin():
 	return {
 		'__template__':'signin.html'
-	}			
+	}	
+
+#用户登出
+@get('/signout')
+def signout(request):
+	referer = request.headers.get('Referer')
+	r = web.HTTPFound(referer or '/')
+	r.set_cookie(COOKIE_NAME,'-deleted-',max_age=0,httponly=True)
+	logging.info('user signed out.')
+	return r			

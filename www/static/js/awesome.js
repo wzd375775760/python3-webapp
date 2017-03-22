@@ -82,7 +82,6 @@ $(function () {
 });
 
 //ajax submit form;
-
 function _httpJSON(method,url,data,callback){
 	var opt = {
 		type:method,
@@ -104,4 +103,19 @@ function _httpJSON(method,url,data,callback){
 	}).fail(function (jqXHR,textStatus){
 		return callback({'error':'http_bad_response','data':''+jqXHR.status,'message':'网络好像出问题了(HTTP' + jqXHR.status + ')'})
 	});
+}
+
+function getJSON(url,data,callback){
+	if(arguments.length ===2){
+		callback = data;
+		data = {};
+	}
+	if(typeof(data)==='object'){
+		var arr = [];
+		$.each(data,function(k,v){
+			arr.push(k+'='+encodeURIComponent(v));
+		});
+		data=arr.join('&');
+	}
+	_httpJSON('GET',url,data,callback);
 }

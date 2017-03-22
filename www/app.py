@@ -21,6 +21,7 @@ import time
 from aiohttp import web
 import orm
 from coroweb import add_routes,add_static
+from handlers import cookie2user,COOKIE_NAME
 
 #从jinja2模板库导入环境与文件系统加载器
 from jinja2 import Environment,FileSystemLoader
@@ -80,18 +81,23 @@ async def logger_factory(app,handler):
 # 以后的每个请求,都是在这个middle之后处理的,都已经绑定了用户信息
 async def auth_factory(app,handler):
 	async def auth(request):
-		logging.info('check user: %s %s' % (request.method,request.path))
+		logging.info('check user: %s,%s' % (request.method,request.path))
 		# 先绑定一个None到请求的__user__属性
-		request.__user__=None
+		request.__user__ = None
 		# 通过cookie名取得加密cookie字符串(不明白的看看handlers.py)
-		cookie_str = request.cookies.get('COOKIE_NAME')
+		cookie_str = request.cookies.get(COOKIE_NAME)
+		logging.info('cookie_str字符串：')
+		logging.info(cookie_str)
 		if cookie_str:
 			# 验证cookie,并得到用户信息
 			user = await cookie2user(cookie_str)
+			# logging.info('解析出来的user')
+			# logging.info(user)
 			if user:
 				logging.info('set current user: %s' % user.email)
 				# 将用户信息绑定到请求上
 				request.__user__ = user
+			# 请求的路径是管理页面,但用户非管理员,将会重定向到登录页面	
 			if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
 				return web.HTTPFound('/signin')
 		return await handler(request)
@@ -123,10 +129,12 @@ async def data_factory(app,handler):
 # 其将request handler的返回值转换为web.Response对象
 async def response_factory(app,handler):
 	async def response(request):
-		logging.info('Response handler...')
+		logging.info('Response handler....')
 		# 调用handler来处理url请求,并返回响应结果
 
 		r = await handler(request)
+		logging.info('response的东西：')
+		logging.info(r)
 		# 以上调用了coroweb中RequestHandler方法，返回了response结果
 		# 若响应结果为StreamResponse,直接返回
 		# StreamResponse是aiohttp定义response的基类,即所有响应类型都继承自该类

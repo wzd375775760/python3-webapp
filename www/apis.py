@@ -39,6 +39,11 @@ class Page(object):
 		self.has_next = self.page_index <self.page_count 		# 页码小于页面总数,说有有下页
 		self.has_previous = self.page_index > 1	 	# > 若页码大于1,说明有前页
 
+	def __str__(self):
+		return "item_count:%s,page_count:%s,page_index:%s,page_size:%s,offset:%s,limit:%s" % (self.item_count,self.page_count,self.page_index,self.page_size,self.offset,self.limit)
+
+	__repr__ = __str__
+
 
 class APIError(Exception):
 	"""定义APIError基类，继承自exception"""
@@ -71,5 +76,5 @@ class APIPermissionError(APIError):
 	定义APIPermissionError类
 	表明没有权限
 	'''
-	def __init__(self,field,message=""):
-		super(APIPermissionError,self).__init__("value:forbidden",field,message)			
+	def __init__(self,message=""):
+		super(APIPermissionError,self).__init__("value:forbidden","permission",message)			

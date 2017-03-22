@@ -192,7 +192,6 @@ class RequestHandler(object):
 				if not name in kw:
 					# return web.HTTPBadRequest('Missing argument:%s' %name)
 					return web.HTTPBadRequest()				
-		logging.info('call with args : %s' % str(kw))
 		# 以上过程即为从request中获得必要的参数
 
 		# 以下调用handler处理,并返回response

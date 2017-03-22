@@ -43,7 +43,8 @@ def destroy_pool():
 def select(sql,args,size=None):
 	global __pool
 	with (yield from __pool) as conn:		#返回连接池信息
-		cur = yield from conn.cursor(aiomysql.DictCursor)		
+		cur = yield from conn.cursor(aiomysql.DictCursor)
+		logging.info('select函数开始执行')		
 		#A cursor which returns results as a dictionary
 		# execute(query, args=None)
 		# Coroutine, executes the given operation substituting any markers with the given parameters.
@@ -73,12 +74,13 @@ def select(sql,args,size=None):
 @asyncio.coroutine
 def execute(sql,args):
 	# print('execute函数开始:',sql.replace('?', '%s'))
-
+	logging.info('execute函数开始执行')
 	with(yield from __pool) as conn:
 		try:
 			cur = yield from conn.cursor()
 			# execute: insert into `User` (`password`,`name`,`email`,`id`) values (%s,%s,%s,%s)  ['321654', 'Tom', '3757757@qq.com', 4]
-			print('execute函数开始:%s' % sql)
+			logging.info(sql.replace('?', '%s'))
+			logging.info(args)
 			yield from cur.execute(sql.replace('?', '%s'), args)
 			affected = cur.rowcount
 			yield from cur.close()
