@@ -234,6 +234,8 @@ def api_get_blog(*,id):
 #博客详情页面
 @get('/blog/{id}')
 def get_blog(id):
+	logging.info('/blog/{id}函数开始：')
+	logging.info(id)
 	blog = yield from Blog.find(id)
 	#从数据库拉取指定blog的全部评论,按时间降序排序,即最新的排在最前
 	comments = yield from Comment.findAll('blog_id=?',[id],orderBy='created_at desc')
@@ -276,6 +278,94 @@ def manage_create_blog():
 		# action的值也将传给js变量action
 		# 将在用户提交博客的时候,将数据post到action指定的路径,此处即为创建博客的api
 	}
+
+# 修改博客的页面
+@get('/manage/blogs/edit')
+def manage_edit_blog(*,id):
+	return {
+		'__template__':'manage_blog_edit.html',
+		'id':id,	# id的值将传给js变量
+		# 将在用户提交博客的时候,将数据post到action指定的路径,此处即为创建博客的api
+		'action':'/api/blogs/%s' % id
+	}
+
+# 管理博客的页面
+@get('/manage/blogs')
+def manage_blogs(*,page='1'):
+	return {
+		'__template__':'manage_blogs.html',
+		'page_index':get_page_index(page)
+	}
+
+#API:删除博客
+@post('/api/blogs/{id}/delete')
+def api_delete_blog(request,*,id):
+	check_admin(request)
+	blog=yield from Blog.find(id);
+	yield from blog.remove()
+	return dict(id=id)
+
+
+#API：创建评论
+@post('/api/blogs/{id}/comments')
+def api_create_comment(id,request,*,content):
+	user = request.__user__
+	logging.info('获取blog信息：')
+	logging.info(user)
+	if user is None:
+		raise APIPermissionError('Please signin first.')
+	if not content or not content.strip():
+		raise APIError('content','content cannot be empty')
+	blog = yield from Blog.find(id)
+	if blog is None:
+		raise APIResourceNotFoundError('Blog','No suck a blog.')
+	
+	logging.info(blog.id)
+	comment = Comment(user_id=user.id,user_name=user.name,user_image=user.image,blog_id=blog.id,content=content.strip())			
+	yield from comment.save()
+	return comment 
+
+#管理评论的页面
+@get('/manage/comments')
+def manage_comments(*,page='1'):
+	return {
+		'__template__':'manage_comments.html',
+		'page_index':get_page_index(page)	#通过page_index来显示分页
+	}
+
+#API:获取评论
+@get('/api/comments')
+def api_comments(*,page='1'):
+	page_index = get_page_index(page)
+	num = yield from Comment.findNumber('count(id)')
+	p=Page(num,page_index)
+	if num==0:
+		return dict(page=p,comments=())
+	comments = yield from Comment.findAll(orderBy='created_at desc',limit=(p.offset,p.limit))
+	return dict(page=p,comments=comments)	# 返回字典,以供response中间件处理
+
+#API：删除评论
+@post('/api/comments/{id}/delete')
+def api_delete_comments(id,request):
+	check_admin(request)
+	comment = yield from Comment.find(id)
+	if comment is None:
+		raise APIResourceNotFoundError('comment','No suck a Comment')
+	yield from comment.remove()
+	return dict(id=id)
+
+#管理用户的页面
+@get('/manage/users')
+def manage_users(*,page='1'):
+	return {
+		'__template__':'manage_users.html',
+		'page_index':get_page_index(page)
+	}
+
+#管理重定向
+@get('/manage/')
+def manage():
+	return 'redirect:/manage/comments'
 
 #返回注册页面
 @get('/register')

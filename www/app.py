@@ -86,8 +86,8 @@ async def auth_factory(app,handler):
 		request.__user__ = None
 		# 通过cookie名取得加密cookie字符串(不明白的看看handlers.py)
 		cookie_str = request.cookies.get(COOKIE_NAME)
-		logging.info('cookie_str字符串：')
-		logging.info(cookie_str)
+		# logging.info('cookie_str字符串：')
+		# logging.info(cookie_str)
 		if cookie_str:
 			# 验证cookie,并得到用户信息
 			user = await cookie2user(cookie_str)
@@ -98,9 +98,9 @@ async def auth_factory(app,handler):
 				# 将用户信息绑定到请求上
 				request.__user__ = user
 			# 请求的路径是管理页面,但用户非管理员,将会重定向到登录页面	
-			if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
-				return web.HTTPFound('/signin')
-		return await handler(request)
+		if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+			return web.HTTPFound('/signin')
+		return (await handler(request))
 	return auth		
 
 
@@ -130,11 +130,12 @@ async def data_factory(app,handler):
 async def response_factory(app,handler):
 	async def response(request):
 		logging.info('Response handler....')
+		logging.info(request.path)
 		# 调用handler来处理url请求,并返回响应结果
 
 		r = await handler(request)
-		logging.info('response的东西：')
-		logging.info(r)
+		# logging.info('response的东西：')
+		# logging.info(r)
 		# 以上调用了coroweb中RequestHandler方法，返回了response结果
 		# 若响应结果为StreamResponse,直接返回
 		# StreamResponse是aiohttp定义response的基类,即所有响应类型都继承自该类
@@ -161,12 +162,12 @@ async def response_factory(app,handler):
 			# 若不存在对应模板,则将字典调整为json格式返回,并设置响应类型为json
 			if template is None:
 				resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode("utf-8"))
-				resp.content_type='application/json;charset=uft-8'
+				resp.content_type="application/json;charset=utf-8"
 				return resp
 			# 存在对应模板的,则将套用模板,用request handler的结果进行渲染	
 			else:
 				r['__user__'] = request.__user__
-				resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
+				resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode("utf-8"))
 				resp.content_type ='text/html;charset = utf-8'
 				return resp	
 		# 若响应结果为整型的

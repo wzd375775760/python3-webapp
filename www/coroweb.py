@@ -80,12 +80,10 @@ def get_named_kw_args(fn):
 
 # 判断函数fn是否带有命名关键字参数
 def has_named_kw_args(fn):
-	args = []
 	params = inspect.signature(fn).parameters
 	for name , param in params.items():
 		if param.kind == inspect.Parameter.KEYWORD_ONLY:
-			args.append(name)
-	return True
+			return True
 
 # 判断函数fn是否带有关键字参数
 def has_var_kw_arg(fn):
@@ -130,6 +128,12 @@ class RequestHandler(object):
 	# 此处参数为request
 	async def __call__(self,request):
 		kw = None			# 设不存在关键字参数
+		# logging.info('所有的参数：')
+		# logging.info(self._has_request_arg)
+		# logging.info(self._has_var_kw_arg)
+		# logging.info(self._has_named_kw_args)
+		# logging.info(self._named_kw_args)
+		# logging.info(self._required_kw_args)
 		# 存在关键字参数/命名关键字参数
 		if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
 			# http method 为 post的处理
@@ -196,6 +200,8 @@ class RequestHandler(object):
 
 		# 以下调用handler处理,并返回response
 		try:
+			# logging.info('执行到coroweb这里：')
+			# logging.info(**kw)
 			r = await self._func(**kw)
 			return r
 		except APIError as e:

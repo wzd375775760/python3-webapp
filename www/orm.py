@@ -370,7 +370,7 @@ class Model(dict,metaclass = ModelMetaclass):
 			logging.warning('failed to update record:affected rows: %s' % rows)
 
 	@asyncio.coroutine
-	def delete(self):
+	def remove(self):
 		args = [self.getValue(self.__primary_key__)]
 		rows = yield from execute(self.__delete__,args)
 		if rows !=1:
