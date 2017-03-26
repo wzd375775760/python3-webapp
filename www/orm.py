@@ -96,7 +96,8 @@ def execute(sql,args):
 # -*-ModelMetaclass的工作主要是为一个数据库表映射成一个封装的类做准备：  
 # ***读取具体子类(user)的映射信息  
 # 创造类的时候，排除对Model类的修改  
-# 在当前类中查找所有的类属性(attrs)，如果找到Field属性，就将其保存到__mappings__的dict中，同时从类属性中删除Field(防止实例属性遮住类的同名属性)  
+# 在当前类中查找所有的类属性(attrs)，如果找到Field属性，就将其保存到__mappings__的dict中，
+# 同时从类属性中删除Field(防止实例属性遮住类的同名属性)  
 # 将数据库表名保存到__table__中  
    
 # 完成这些工作就可以在Model中定义各种数据库的操作方法  
@@ -281,8 +282,10 @@ class Model(dict,metaclass = ModelMetaclass):
 	@asyncio.coroutine
 	def findNumber(cls,selectField,where = None,args=None):
 		#find number by select and where.
+		# num = yield from Blog.findNumber('count(id)')
 		logging.info('ORM的findNumber函数：')
 		sql = ["select %s _num_ from `%s`" % (selectField, cls.__table__)]
+		logging.info(sql)
 		if where:
 			sql.append('where')
 			sql.append(where)

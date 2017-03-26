@@ -200,7 +200,7 @@ class RequestHandler(object):
 
 		# 以下调用handler处理,并返回response
 		try:
-			# logging.info('执行到coroweb这里：')
+			logging.info('执行到coroweb这里：')
 			# logging.info(**kw)
 			r = await self._func(**kw)
 			return r

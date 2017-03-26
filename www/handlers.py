@@ -101,6 +101,7 @@ def cookie2user(cookie_str):
 #首页get请求的处理
 @get('/')
 def index(*,page='1'):
+	logging.info('我是首页')
 	page_index = get_page_index(page)
 	num = yield from Blog.findNumber('count(id)')
 	page = Page(num,page_index)

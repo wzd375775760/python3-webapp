@@ -191,7 +191,6 @@ async def response_factory(app,handler):
 # 时间过滤器
 def datetime_filer(t):
 	#定义时间差
-	print('~~~~~~开始执行filter时间过滤器',t)
 	delta = int (time.time()-t)
 
 	#针对时间分类
@@ -205,9 +204,6 @@ def datetime_filer(t):
 		return u'%s天前' % (delta//86400)
 	dt = datetime.fromtimestamp(t)
 	return u'%s年%s月%s日' % (dt.year,dt.month,dt.day)
-
-# def index(request):
-# 	return web.Response(body=b'<h1>Awesome</h1>', content_type='text/html', charset='UTF-8')
 
 @asyncio.coroutine
 def init(loop):
